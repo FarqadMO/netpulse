@@ -1,0 +1,55 @@
+# NetPulse Configuration
+# Copy this file to ~/.netpulse/config.yaml
+
+# Logging settings
+log_level: info                    # debug, info, warn, error
+log_file: ~/.netpulse/netpulse.log
+
+# Data directory (default: ~/.netpulse)
+# data_dir: ~/.netpulse
+
+# Probe intervals (use Go duration format: 1h, 30m, 5s)
+ip_check_interval: 5m              # How often to check public IP
+trace_interval: 15m                # How often to run traceroutes
+ping_sweep_interval: 30m           # How often to scan local network
+port_scan_interval: 1h             # How often to scan ports
+
+# Traceroute targets
+trace_targets:
+  - 8.8.8.8                        # Google DNS
+  - 1.1.1.1                        # Cloudflare DNS
+  - 16.24.0.0                     # Middle East target
+
+# Ping sweep settings
+sweep_subnet: 192.168.0.0/24       # Subnet to scan for live hosts
+sweep_concurrency: 50              # Number of concurrent pings
+sweep_timeout: 2s                  # Ping timeout per host
+
+# Port scan settings
+scan_ports:                        # Ports to scan on discovered hosts
+  - 21   # FTP
+  - 22   # SSH
+  - 23   # Telnet
+  - 25   # SMTP
+  - 53   # DNS
+  - 80   # HTTP
+  - 110  # POP3
+  - 143  # IMAP
+  - 443  # HTTPS
+  - 445  # SMB
+  - 3306 # MySQL
+  - 3389 # RDP
+  - 5432 # PostgreSQL
+  - 8080 # HTTP Alt
+scan_concurrency: 20               # Number of concurrent port scans
+scan_timeout: 3s                   # Port scan timeout
+
+# Web server settings
+web_port: 8080                     # Port for web dashboard
+
+# Report settings
+report_output_dir: ~/.netpulse/reports
+
+# Adaptive interval settings
+# When network is stable, intervals are multiplied by this factor
+stable_interval_multiplier: 2.0

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetPulse Dashboard</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>▶ NETPULSE<span style="animation: blink 1s infinite">_</span></h1>
+            <div class="theme-switcher">
+                <button class="theme-btn active" data-theme="hacker" title="Hacker"></button>
+                <button class="theme-btn" data-theme="cyberpunk" title="Cyberpunk"></button>
+                <button class="theme-btn" data-theme="blood" title="Blood"></button>
+                <button class="theme-btn" data-theme="amber" title="Amber"></button>
+                <button class="theme-btn" data-theme="ocean" title="Ocean"></button>
+            </div>
+        </header>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('overview')">Overview</button>
+            <button class="tab" onclick="showTab('map')">🗺️ Map</button>
+            <button class="tab" onclick="showTab('topology')">Topology</button>
+            <button class="tab" onclick="showTab('traces')">Traces</button>
+            <button class="tab" onclick="showTab('latency')">Latency</button>
+            <button class="tab" onclick="showTab('anomalies')">Anomalies</button>
+            <button class="tab" onclick="showTab('hosts')">Hosts</button>
+        </div>
+        
+        <!-- Overview -->
+        <div id="overview" class="tab-content active">
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">IP Status</div>
+                    <div class="stat-row"><span class="stat-label">IP</span><span class="stat-value">{{.current_ip}}</span></div>
+                    <div class="stat-row"><span class="stat-label">ISP</span><span class="stat-value">{{.isp}}</span></div>
+                    <div class="stat-row"><span class="stat-label">ASN</span><span class="stat-value">{{.asn}}</span></div>
+                    <div class="stat-row"><span class="stat-label">Last Check</span><span class="stat-value">{{.last_check}}</span></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Statistics</div>
+                    <div class="stat-row">
+                        <span class="stat-label">Daemon</span>
+                        <span>{{if .daemon_running}}<span class="status-badge status-running">Online</span>{{else}}<span class="status-badge status-stopped">Offline</span>{{end}}</span>
+                    </div>
+                    <div class="stat-row"><span class="stat-label">IP Records</span><span class="stat-value">{{.ip_count}}</span></div>
+                    <div class="stat-row"><span class="stat-label">Alive Hosts</span><span class="stat-value">{{.host_count}}</span></div>
+                    <div class="stat-row"><span class="stat-label">Open Ports</span><span class="stat-value">{{.port_count}}</span></div>
+                </div>
+            </div>
+            <div class="card" style="margin-top: 1rem;">
+                <div class="card-title">Discovered Hosts</div>
+                {{if .hosts}}
+                <table>
+                    <thead><tr><th>IP</th><th>Hostname</th><th>Latency</th><th>Last Seen</th></tr></thead>
+                    <tbody>{{range .hosts}}<tr><td>{{.IP}}</td><td>{{if .Hostname}}{{.Hostname}}{{else}}-{{end}}</td><td>{{printf "%.1f" .LatencyMs}} ms</td><td>{{.LastSeen.Format "15:04:05"}}</td></tr>{{end}}</tbody>
+                </table>
+                {{else}}<p class="empty-state">> No hosts discovered</p>{{end}}
+            </div>
+        </div>
+        
+        <!-- Map -->
+        <div id="map" class="tab-content">
+            <div class="card">
+                <div class="card-title">GeoIP World Map</div>
+                <div class="map-container">
+                    <div id="geoMap" class="map-view"></div>
+                    <div class="map-panel">
+                        <h3>Select Trace</h3>
+                        <div id="mapTraceList"><p class="empty-state">> Loading...</p></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Topology -->
+        <div id="topology" class="tab-content">
+            <div class="card">
+                <div class="card-title">Network Topology</div>
+                <div class="filter-bar">
+                    <select id="topologyTarget" onchange="loadTopology()">
+                        <option value="">All Targets</option>
+                        {{range .trace_targets}}<option value="{{.}}">{{.}}</option>{{end}}
+                    </select>
+                    <button class="btn" onclick="loadTopology()">Refresh</button>
+                </div>
+                <div id="topologyDiagram" class="mermaid">graph LR
+    Source[Your Network]
+    Loading[Loading...]
+    Source --> Loading</div>
+            </div>
+        </div>
+        
+        <!-- Traces -->
+        <div id="traces" class="tab-content">
+            <div class="card">
+                <div class="card-title">Traceroute Results</div>
+                <div class="filter-bar">
+                    <select id="traceFilter" onchange="loadTraces(1)">
+                        <option value="">All Targets</option>
+                        {{range .trace_targets}}<option value="{{.}}">{{.}}</option>{{end}}
+                    </select>
+                    <button class="btn" onclick="loadTraces(1)">Refresh</button>
+                </div>
+                <div id="traceResults"><p class="empty-state">> Loading traces...</p></div>
+                <div id="tracePagination" class="pagination"></div>
+            </div>
+        </div>
+        
+        <!-- Latency -->
+        <div id="latency" class="tab-content">
+            <div class="card">
+                <div class="card-title">Latency Trends</div>
+                <div class="filter-bar">
+                    <select id="latencyTarget" onchange="loadLatencyChart()">
+                        <option value="">All Targets</option>
+                        {{range .trace_targets}}<option value="{{.}}">{{.}}</option>{{end}}
+                    </select>
+                </div>
+                <canvas id="latencyChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Anomalies -->
+        <div id="anomalies" class="tab-content">
+            <div class="card">
+                <div class="card-title">Route Changes & Anomalies</div>
+                <div id="anomalyList"><p class="empty-state">> Loading anomalies...</p></div>
+                <div id="anomalyPagination" class="pagination"></div>
+            </div>
+        </div>
+        
+        <!-- Hosts -->
+        <div id="hosts" class="tab-content">
+            <div class="card">
+                <div class="card-title">Network Scan</div>
+                <div class="filter-bar">
+                    <input type="text" id="hostFilter" placeholder="Filter by IP..." oninput="filterHosts()">
+                </div>
+                {{if .hosts}}
+                <table id="hostTable">
+                    <thead><tr><th>IP</th><th>Hostname</th><th>Status</th><th>Latency</th><th>Last Seen</th></tr></thead>
+                    <tbody>{{range .hosts}}<tr><td>{{.IP}}</td><td>{{if .Hostname}}{{.Hostname}}{{else}}-{{end}}</td><td><span class="status-badge status-running">Alive</span></td><td>{{printf "%.1f" .LatencyMs}} ms</td><td>{{.LastSeen.Format "15:04:05"}}</td></tr>{{end}}</tbody>
+                </table>
+                {{else}}<p class="empty-state">> No hosts</p>{{end}}
+            </div>
+        </div>
+        
+        <div class="actions">
+            <a href="/report" class="btn">Download Report</a>
+            <button class="btn" onclick="location.reload()">Refresh</button>
+        </div>
+        <div class="footer">NETPULSE v1.0 | Auto-refresh in <span id="countdown">60</span>s</div>
+    </div>
+    
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
