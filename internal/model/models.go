@@ -35,12 +35,17 @@ type TraceHop struct {
 
 // ScanHost represents a discovered host from ping sweep.
 type ScanHost struct {
-	ID       int64     `json:"id"`
-	IP       string    `json:"ip"`
-	Hostname string    `json:"hostname"`
-	Alive    bool      `json:"alive"`
-	LatencyMs float64  `json:"latency_ms"`
-	LastSeen time.Time `json:"last_seen"`
+	ID        int64      `json:"id"`
+	IP        string     `json:"ip"`
+	Hostname  string     `json:"hostname"`
+	Alive     bool       `json:"alive"`
+	LatencyMs float64    `json:"latency_ms"`
+	LastSeen  time.Time  `json:"last_seen"`
+	Ports     []ScanPort `json:"ports,omitempty"`
+	// User Metadata
+	DisplayName string   `json:"display_name,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	Icon        string   `json:"icon,omitempty"`
 }
 
 // ScanPort represents an open port on a host.

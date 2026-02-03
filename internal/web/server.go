@@ -45,6 +45,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/traces", h.APIGetTraces)
 	mux.HandleFunc("/api/traces/", h.TraceGeoHandler) // Handles /api/traces/{id}/geo
 	mux.HandleFunc("/api/hosts", h.APIGetHosts)
+	mux.HandleFunc("/api/hosts/", h.APIUpdateHostMetadata) // Handles /api/hosts/{id}/metadata
 	mux.HandleFunc("/api/status", h.APIGetStatus)
 	mux.HandleFunc("/api/geoip", h.GeoIPHandler)
 	mux.HandleFunc("/report", h.DownloadReport)

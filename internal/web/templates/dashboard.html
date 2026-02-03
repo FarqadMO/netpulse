@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,6 +12,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
+
 <body>
     <div class="container">
         <header>
@@ -23,49 +25,72 @@
                 <button class="theme-btn" data-theme="ocean" title="Ocean"></button>
             </div>
         </header>
-        
+
         <div class="tabs">
             <button class="tab active" onclick="showTab('overview')">Overview</button>
-            <button class="tab" onclick="showTab('map')">🗺️ Map</button>
+            <button class="tab" onclick="showTab('map')">Map</button>
             <button class="tab" onclick="showTab('topology')">Topology</button>
             <button class="tab" onclick="showTab('traces')">Traces</button>
             <button class="tab" onclick="showTab('latency')">Latency</button>
             <button class="tab" onclick="showTab('anomalies')">Anomalies</button>
             <button class="tab" onclick="showTab('hosts')">Hosts</button>
         </div>
-        
+
         <!-- Overview -->
         <div id="overview" class="tab-content active">
             <div class="grid">
                 <div class="card">
                     <div class="card-title">IP Status</div>
-                    <div class="stat-row"><span class="stat-label">IP</span><span class="stat-value">{{.current_ip}}</span></div>
-                    <div class="stat-row"><span class="stat-label">ISP</span><span class="stat-value">{{.isp}}</span></div>
-                    <div class="stat-row"><span class="stat-label">ASN</span><span class="stat-value">{{.asn}}</span></div>
-                    <div class="stat-row"><span class="stat-label">Last Check</span><span class="stat-value">{{.last_check}}</span></div>
+                    <div class="stat-row"><span class="stat-label">IP</span><span id="stat-ip"
+                            class="stat-value">{{.current_ip}}</span></div>
+                    <div class="stat-row"><span class="stat-label">ISP</span><span id="stat-isp"
+                            class="stat-value">{{.isp}}</span>
+                    </div>
+                    <div class="stat-row"><span class="stat-label">ASN</span><span id="stat-asn"
+                            class="stat-value">{{.asn}}</span>
+                    </div>
+                    <div class="stat-row"><span class="stat-label">Last Check</span><span id="stat-last-check"
+                            class="stat-value">{{.last_check}}</span></div>
                 </div>
                 <div class="card">
                     <div class="card-title">Statistics</div>
                     <div class="stat-row">
                         <span class="stat-label">Daemon</span>
-                        <span>{{if .daemon_running}}<span class="status-badge status-running">Online</span>{{else}}<span class="status-badge status-stopped">Offline</span>{{end}}</span>
+                        <span id="stat-daemon">{{if .daemon_running}}<span
+                                class="status-badge status-running">Online</span>{{else}}<span
+                                class="status-badge status-stopped">Offline</span>{{end}}</span>
                     </div>
-                    <div class="stat-row"><span class="stat-label">IP Records</span><span class="stat-value">{{.ip_count}}</span></div>
-                    <div class="stat-row"><span class="stat-label">Alive Hosts</span><span class="stat-value">{{.host_count}}</span></div>
-                    <div class="stat-row"><span class="stat-label">Open Ports</span><span class="stat-value">{{.port_count}}</span></div>
+                    <div class="stat-row"><span class="stat-label">IP Records</span><span id="stat-ip-records"
+                            class="stat-value">{{.ip_count}}</span></div>
+                    <div class="stat-row"><span class="stat-label">Alive Hosts</span><span id="stat-alive-hosts"
+                            class="stat-value">{{.host_count}}</span></div>
+                    <div class="stat-row"><span class="stat-label">Open Ports</span><span id="stat-open-ports"
+                            class="stat-value">{{.port_count}}</span></div>
                 </div>
             </div>
             <div class="card" style="margin-top: 1rem;">
                 <div class="card-title">Discovered Hosts</div>
                 {{if .hosts}}
                 <table>
-                    <thead><tr><th>IP</th><th>Hostname</th><th>Latency</th><th>Last Seen</th></tr></thead>
-                    <tbody>{{range .hosts}}<tr><td>{{.IP}}</td><td>{{if .Hostname}}{{.Hostname}}{{else}}-{{end}}</td><td>{{printf "%.1f" .LatencyMs}} ms</td><td>{{.LastSeen.Format "15:04:05"}}</td></tr>{{end}}</tbody>
+                    <thead>
+                        <tr>
+                            <th>IP</th>
+                            <th>Hostname</th>
+                            <th>Latency</th>
+                            <th>Last Seen</th>
+                        </tr>
+                    </thead>
+                    <tbody>{{range .hosts}}<tr>
+                            <td>{{.IP}}</td>
+                            <td>{{if .Hostname}}{{.Hostname}}{{else}}-{{end}}</td>
+                            <td>{{printf "%.1f" .LatencyMs}} ms</td>
+                            <td>{{.LastSeen.Format "15:04:05"}}</td>
+                        </tr>{{end}}</tbody>
                 </table>
                 {{else}}<p class="empty-state">> No hosts discovered</p>{{end}}
             </div>
         </div>
-        
+
         <!-- Map -->
         <div id="map" class="tab-content">
             <div class="card">
@@ -74,12 +99,14 @@
                     <div id="geoMap" class="map-view"></div>
                     <div class="map-panel">
                         <h3>Select Trace</h3>
-                        <div id="mapTraceList"><p class="empty-state">> Loading...</p></div>
+                        <div id="mapTraceList">
+                            <p class="empty-state">> Loading...</p>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-        
+
         <!-- Topology -->
         <div id="topology" class="tab-content">
             <div class="card">
@@ -92,12 +119,12 @@
                     <button class="btn" onclick="loadTopology()">Refresh</button>
                 </div>
                 <div id="topologyDiagram" class="mermaid">graph LR
-    Source[Your Network]
-    Loading[Loading...]
-    Source --> Loading</div>
+                    Source[Your Network]
+                    Loading[Loading...]
+                    Source --> Loading</div>
             </div>
         </div>
-        
+
         <!-- Traces -->
         <div id="traces" class="tab-content">
             <div class="card">
@@ -109,11 +136,13 @@
                     </select>
                     <button class="btn" onclick="loadTraces(1)">Refresh</button>
                 </div>
-                <div id="traceResults"><p class="empty-state">> Loading traces...</p></div>
+                <div id="traceResults">
+                    <p class="empty-state">> Loading traces...</p>
+                </div>
                 <div id="tracePagination" class="pagination"></div>
             </div>
         </div>
-        
+
         <!-- Latency -->
         <div id="latency" class="tab-content">
             <div class="card">
@@ -127,39 +156,113 @@
                 <canvas id="latencyChart"></canvas>
             </div>
         </div>
-        
+
         <!-- Anomalies -->
         <div id="anomalies" class="tab-content">
             <div class="card">
                 <div class="card-title">Route Changes & Anomalies</div>
-                <div id="anomalyList"><p class="empty-state">> Loading anomalies...</p></div>
+                <div id="anomalyList">
+                    <p class="empty-state">> Loading anomalies...</p>
+                </div>
                 <div id="anomalyPagination" class="pagination"></div>
             </div>
         </div>
-        
+
         <!-- Hosts -->
         <div id="hosts" class="tab-content">
             <div class="card">
-                <div class="card-title">Network Scan</div>
+                <div class="card-title">Network Security Matrix</div>
                 <div class="filter-bar">
                     <input type="text" id="hostFilter" placeholder="Filter by IP..." oninput="filterHosts()">
                 </div>
                 {{if .hosts}}
-                <table id="hostTable">
-                    <thead><tr><th>IP</th><th>Hostname</th><th>Status</th><th>Latency</th><th>Last Seen</th></tr></thead>
-                    <tbody>{{range .hosts}}<tr><td>{{.IP}}</td><td>{{if .Hostname}}{{.Hostname}}{{else}}-{{end}}</td><td><span class="status-badge status-running">Alive</span></td><td>{{printf "%.1f" .LatencyMs}} ms</td><td>{{.LastSeen.Format "15:04:05"}}</td></tr>{{end}}</tbody>
-                </table>
-                {{else}}<p class="empty-state">> No hosts</p>{{end}}
+                <div class="security-grid" id="hostGrid">
+                    {{range .hosts}}
+                    <div class="host-card" data-ip="{{.IP}}">
+                        <div class="host-header">
+                            <div class="host-id">
+                                <span class="host-ip">{{.IP}}</span>
+                                <span class="host-name">{{if .Hostname}}{{.Hostname}}{{else}}Unknown
+                                    Device{{end}}</span>
+                            </div>
+                            <div class="host-status">
+                                <span class="status-dot online"></span>
+                                <span class="latency">{{printf "%.0f" .LatencyMs}}ms</span>
+                            </div>
+                        </div>
+                        <div class="port-section">
+                            <div class="port-label">OPEN PORTS detected</div>
+                            {{if .Ports}}
+                            <div class="port-grid">
+                                {{range .Ports}}
+                                <div class="port-badge" title="{{.Service}}">
+                                    <span class="port-num">{{.Port}}</span>
+                                    <span class="port-proto">{{.Protocol}}</span>
+                                </div>
+                                {{end}}
+                            </div>
+                            {{else}}
+                            <div class="no-ports">No open ports found</div>
+                            {{end}}
+                        </div>
+                        <div class="host-footer">
+                            <span class="last-seen">Seen: {{.LastSeen.Format "15:04:05"}}</span>
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+                {{else}}<p class="empty-state">> No hosts discovered</p>{{end}}
             </div>
         </div>
-        
+
         <div class="actions">
             <a href="/report" class="btn">Download Report</a>
-            <button class="btn" onclick="location.reload()">Refresh</button>
+            <button class="btn" onclick="updateActiveTab()">Refresh</button>
         </div>
-        <div class="footer">NETPULSE v1.0 | Auto-refresh in <span id="countdown">60</span>s</div>
+        <div class="footer">NETPULSE v1.0 | <span class="live-indicator">●</span> Live Poll Mode</div>
     </div>
-    
+
     <script src="/static/js/dashboard.js"></script>
+
+    <!-- Asset Modal -->
+    <div id="assetModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Asset</h3>
+                <span class="close" onclick="closeAssetModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="assetId">
+                <div class="form-group">
+                    <label>Display Name</label>
+                    <input type="text" id="assetName" placeholder="e.g. CEO Laptop">
+                </div>
+                <div class="form-group">
+                    <label>Icon</label>
+                    <div class="icon-selector" id="iconSelector">
+                        <div class="icon-option" data-icon="desktop" onclick="selectIcon('desktop')">🖥️</div>
+                        <div class="icon-option" data-icon="laptop" onclick="selectIcon('laptop')">💻</div>
+                        <div class="icon-option" data-icon="server" onclick="selectIcon('server')">🗄️</div>
+                        <div class="icon-option" data-icon="phone" onclick="selectIcon('phone')">📱</div>
+                        <div class="icon-option" data-icon="iot" onclick="selectIcon('iot')">🔌</div>
+                        <div class="icon-option" data-icon="printer" onclick="selectIcon('printer')">🖨️</div>
+                        <div class="icon-option" data-icon="router" onclick="selectIcon('router')">🌐</div>
+                        <div class="icon-option" data-icon="camera" onclick="selectIcon('camera')">📷</div>
+                    </div>
+                    <input type="hidden" id="assetIcon">
+                </div>
+                <div class="form-group">
+                    <label>Tags (comma separated)</label>
+                    <input type="text" id="assetTags" placeholder="Production, Critical, etc.">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" style="background:transparent;border:1px solid #666"
+                    onclick="closeAssetModal()">Cancel</button>
+                <button class="btn" onclick="saveAssetMetadata()">Save Changes</button>
+            </div>
+        </div>
+    </div>
 </body>
+
 </html>

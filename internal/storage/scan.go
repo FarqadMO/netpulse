@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/user/netpulse/internal/model"
@@ -74,13 +75,16 @@ func (s *ScanStorage) SavePort(port *model.ScanPort) error {
 
 // GetHost returns a host by IP.
 func (s *ScanStorage) GetHost(ip string) (*model.ScanHost, error) {
-	query := `SELECT id, ip, hostname, alive, latency_ms, last_seen 
+	query := `SELECT id, ip, hostname, alive, latency_ms, last_seen, display_name, tags, icon 
 			  FROM scan_hosts WHERE ip = ?`
 	
 	var host model.ScanHost
+	var displayName, tags, icon sql.NullString
+
 	err := s.db.QueryRow(query, ip).Scan(
 		&host.ID, &host.IP, &host.Hostname, 
-		&host.Alive, &host.LatencyMs, &host.LastSeen)
+		&host.Alive, &host.LatencyMs, &host.LastSeen,
+		&displayName, &tags, &icon)
 	
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -89,12 +93,22 @@ func (s *ScanStorage) GetHost(ip string) (*model.ScanHost, error) {
 		return nil, fmt.Errorf("failed to get host: %w", err)
 	}
 	
+	if displayName.Valid {
+		host.DisplayName = displayName.String
+	}
+	if icon.Valid {
+		host.Icon = icon.String
+	}
+	if tags.Valid && tags.String != "" {
+		host.Tags = strings.Split(tags.String, ",")
+	}
+	
 	return &host, nil
 }
 
 // GetAliveHosts returns all alive hosts.
 func (s *ScanStorage) GetAliveHosts() ([]model.ScanHost, error) {
-	query := `SELECT id, ip, hostname, alive, latency_ms, last_seen 
+	query := `SELECT id, ip, hostname, alive, latency_ms, last_seen, display_name, tags, icon 
 			  FROM scan_hosts WHERE alive = 1 ORDER BY ip`
 	
 	rows, err := s.db.Query(query)
@@ -105,13 +119,24 @@ func (s *ScanStorage) GetAliveHosts() ([]model.ScanHost, error) {
 	
 	var hosts []model.ScanHost
 	for rows.Next() {
-		var host model.ScanHost
-		if err := rows.Scan(
-			&host.ID, &host.IP, &host.Hostname,
-			&host.Alive, &host.LatencyMs, &host.LastSeen); err != nil {
-			return nil, fmt.Errorf("failed to scan host: %w", err)
+		var h model.ScanHost
+		var displayName, tags, icon sql.NullString
+		
+		if err := rows.Scan(&h.ID, &h.IP, &h.Hostname, &h.Alive, &h.LatencyMs, &h.LastSeen, &displayName, &tags, &icon); err != nil {
+			continue
 		}
-		hosts = append(hosts, host)
+		
+		if displayName.Valid {
+			h.DisplayName = displayName.String
+		}
+		if icon.Valid {
+			h.Icon = icon.String
+		}
+		if tags.Valid && tags.String != "" {
+			h.Tags = strings.Split(tags.String, ",")
+		}
+
+		hosts = append(hosts, h)
 	}
 	
 	return hosts, rows.Err()
@@ -204,4 +229,16 @@ func (s *ScanStorage) CountOpenPorts() (int, error) {
 	var count int
 	err := s.db.QueryRow("SELECT COUNT(*) FROM scan_ports WHERE state = 'open'").Scan(&count)
 	return count, err
+}
+
+// UpdateHostMetadata updates the user-defined metadata for a host.
+func (s *ScanStorage) UpdateHostMetadata(id int64, displayName string, tags []string, icon string) error {
+	query := `UPDATE scan_hosts SET display_name = ?, tags = ?, icon = ? WHERE id = ?`
+	tagStr := strings.Join(tags, ",")
+	
+	_, err := s.db.Exec(query, displayName, tagStr, icon, id)
+	if err != nil {
+		return fmt.Errorf("failed to update host metadata: %w", err)
+	}
+	return nil
 }

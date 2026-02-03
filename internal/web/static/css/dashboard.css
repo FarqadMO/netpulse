@@ -283,3 +283,311 @@ td { border-bottom: 1px dashed var(--border-color); }
 .empty-state { text-align: center; padding: 2rem; color: var(--text-dim); font-size: 0.85rem; }
 .footer { text-align: center; color: var(--text-dim); margin-top: 1.5rem; font-size: 0.7rem; }
 .actions { margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+/* ===== Map Customization ===== */
+.map-marker {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.map-marker-inner {
+    width: 12px; height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--accent);
+    position: relative;
+    z-index: 2;
+}
+.map-marker-ring {
+    position: absolute;
+    width: 24px; height: 24px;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+    opacity: 0;
+    animation: pulse-ring 2s infinite;
+}
+
+.map-marker.source .map-marker-inner { background: #00ff41; box-shadow: 0 0 15px #00ff41; }
+.map-marker.source .map-marker-ring { border-color: #00ff41; }
+
+.map-marker.target .map-marker-inner { background: #ff4444; box-shadow: 0 0 15px #ff4444; }
+.map-marker.target .map-marker-ring { border-color: #ff4444; }
+
+.map-marker.hop .map-marker-inner { background: #ffaa00; width: 8px; height: 8px; }
+.map-marker.hop .map-marker-ring { display: none; }
+
+@keyframes pulse-ring {
+    0% { transform: scale(0.5); opacity: 1; }
+    100% { transform: scale(2); opacity: 0; }
+}
+
+/* Animated Path */
+.leaflet-overlay-pane path.animated-path {
+    stroke-dasharray: 10, 10;
+    animation: dash-flow 2s linear infinite;
+    filter: drop-shadow(0 0 5px var(--accent));
+}
+
+@keyframes dash-flow {
+    to { stroke-dashoffset: -20; }
+}
+
+/* Glassmorphism Popup */
+.glass-popup .leaflet-popup-content-wrapper {
+    background: rgba(10, 15, 10, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--accent);
+    box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+    border-radius: 8px;
+    padding: 0;
+    color: var(--text-primary);
+}
+.glass-popup .leaflet-popup-tip {
+    background: rgba(10, 15, 10, 0.85);
+    border: 1px solid var(--accent);
+    border-top: none; 
+    border-left: none;
+}
+.glass-popup .leaflet-popup-content {
+    margin: 0;
+    min-width: 250px !important;
+}
+
+.popup-header {
+    background: rgba(0, 255, 65, 0.1);
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.popup-badge {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+.popup-badge.source { background: rgba(0, 255, 65, 0.2); color: #00ff41; border: 1px solid #00ff41; }
+.popup-badge.target { background: rgba(255, 68, 68, 0.2); color: #ff4444; border: 1px solid #ff4444; }
+.popup-badge.hop { background: rgba(255, 170, 0, 0.2); color: #ffaa00; border: 1px solid #ffaa00; }
+
+.popup-body {
+    padding: 1rem;
+    font-size: 0.85rem;
+}
+.popup-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+.popup-label { color: var(--text-dim); }
+.popup-val { color: var(--text-secondary); text-align: right; font-family: monospace; }
+.popup-asn {
+    margin-top: 0.8rem;
+    padding-top: 0.8rem;
+    border-top: 1px dashed var(--border-color);
+    font-size: 0.75rem;
+    color: var(--text-dim);
+}
+.popup-org { color: var(--accent); font-weight: bold; margin-bottom: 2px; display: block; }
+
+/* ===== Security Matrix ===== */
+.security-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.host-card {
+    background: rgba(10, 20, 10, 0.6);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 1rem;
+    position: relative;
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+.host-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+    border-color: var(--accent);
+}
+.host-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.5;
+}
+
+.host-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    border-bottom: 1px dashed var(--border-color);
+    padding-bottom: 0.5rem;
+}
+.host-ip {
+    display: block;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+.host-name {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-top: 2px;
+}
+.host-status {
+    text-align: right;
+}
+.status-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+}
+.status-dot.online {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+    animation: pulse 2s infinite;
+}
+.latency {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    display: block;
+    margin-top: 2px;
+}
+
+.port-label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+}
+.port-label::before {
+    content: '⚠️';
+    margin-right: 5px;
+    font-size: 0.8rem;
+}
+.no-ports {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    font-style: italic;
+    padding: 0.5rem 0;
+}
+
+.port-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+.port-badge {
+    background: rgba(0, 255, 65, 0.1);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    cursor: default;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.port-badge:hover {
+    background: var(--accent);
+    color: var(--bg-primary);
+}
+.port-proto {
+    font-size: 0.6rem;
+    opacity: 0.8;
+    text-transform: uppercase;
+}
+
+.host-footer {
+    margin-top: 1rem;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-align: right;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.live-indicator {
+    color: var(--success);
+    margin-right: 5px;
+    animation: pulse 2s infinite;
+}
+
+/* Asset Modal */
+.modal {
+    display: none; 
+    position: fixed; 
+    z-index: 1000; 
+    left: 0; top: 0; 
+    width: 100%; height: 100%; 
+    background-color: rgba(0,0,0,0.8); 
+    backdrop-filter: blur(5px);
+}
+.modal-content {
+    background-color: #0a0f0a;
+    border: 1px solid var(--accent);
+    margin: 10% auto; 
+    padding: 20px; 
+    width: 400px;
+    border-radius: 8px;
+    box-shadow: 0 0 20px var(--accent-dim);
+}
+.modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px; margin-bottom: 20px;
+}
+.close {
+    color: #888; font-size: 28px; font-weight: bold; cursor: pointer;
+}
+.close:hover { color: #fff; }
+
+.form-group { margin-bottom: 15px; }
+.form-group label { display: block; margin-bottom: 5px; color: #888; font-size: 0.9em; }
+.form-group input { 
+    width: 100%; 
+    padding: 8px; 
+    background: #111; 
+    border: 1px solid #333; 
+    color: #fff; 
+    border-radius: 4px;
+}
+.form-group input:focus { outline: none; border-color: var(--accent); }
+
+.icon-selector { display: flex; gap: 10px; flex-wrap: wrap; }
+.icon-option { 
+    width: 35px; height: 35px; 
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; 
+    border-radius: 4px; border: 1px solid #333;
+    background: #111;
+}
+.icon-option:hover, .icon-option.selected {
+    background: var(--accent);
+    color: #000;
+}
+.modal-footer {
+    display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;
+}
+
+.host-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.host-tag { background: #222; border: 1px solid #444; font-size: 0.65rem; padding: 2px 4px; border-radius: 3px; color: #aaa; }
+.host-icon { font-size: 1.5rem; margin-right: 10px; }
+.host-id { display: flex; align-items: center; }

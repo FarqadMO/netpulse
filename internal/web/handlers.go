@@ -2,8 +2,10 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/user/netpulse/internal/daemon"
@@ -146,6 +148,12 @@ func (h *Handlers) APIGetHosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+	// Populate ports
+	for i := range hosts {
+		ports, _ := scanStorage.GetHostPorts(hosts[i].ID)
+		hosts[i].Ports = ports
+	}
+	
 	writeJSON(w, hosts)
 }
 
@@ -162,6 +170,12 @@ func (h *Handlers) APIGetStatus(w http.ResponseWriter, r *http.Request) {
 	ipStorage := storage.NewIPStorage(h.db)
 	if count, err := ipStorage.Count(); err == nil {
 		status["ip_records"] = count
+	}
+	if latest, err := ipStorage.GetLatest(); err == nil && latest != nil {
+		status["current_ip"] = latest.IP
+		status["isp"] = latest.ISP
+		status["asn"] = latest.ASN
+		status["last_check"] = latest.Timestamp.Format("2006-01-02 15:04:05")
 	}
 	
 	scanStorage := storage.NewScanStorage(h.db)
@@ -231,6 +245,11 @@ func (h *Handlers) getDashboardData() map[string]interface{} {
 	
 	scanStorage := storage.NewScanStorage(h.db)
 	if hosts, err := scanStorage.GetAliveHosts(); err == nil {
+		// Populate ports
+		for i := range hosts {
+			ports, _ := scanStorage.GetHostPorts(hosts[i].ID)
+			hosts[i].Ports = ports
+		}
 		data["hosts"] = hosts
 		data["host_count"] = len(hosts)
 	}
@@ -263,4 +282,47 @@ func writeError(w http.ResponseWriter, err error, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+}
+
+type UpdateHostMetadataRequest struct {
+	DisplayName string   `json:"display_name"`
+	Tags        []string `json:"tags"`
+	Icon        string   `json:"icon"`
+}
+
+func (h *Handlers) APIUpdateHostMetadata(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, fmt.Errorf("method not allowed"), http.StatusMethodNotAllowed)
+		return
+	}
+
+	path := r.URL.Path
+	parts := strings.Split(path, "/")
+	if len(parts) < 4 { // /api/hosts/{id}/metadata or similar
+		writeError(w, fmt.Errorf("invalid path"), http.StatusBadRequest)
+		return
+	}
+	// Assuming path /api/hosts/{id}/metadata. parts: ["", "api", "hosts", "123", "metadata"]
+	// Index 3 is ID.
+	idStr := parts[3]
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, fmt.Errorf("invalid id"), http.StatusBadRequest)
+		return
+	}
+
+	var req UpdateHostMetadataRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	scanStorage := storage.NewScanStorage(h.db)
+	if err := scanStorage.UpdateHostMetadata(id, req.DisplayName, req.Tags, req.Icon); err != nil {
+		writeError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	writeJSON(w, map[string]string{"status": "ok"})
 }

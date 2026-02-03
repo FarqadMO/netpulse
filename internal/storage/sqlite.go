@@ -92,7 +92,10 @@ func (db *DB) createTables() error {
 			hostname TEXT,
 			alive INTEGER DEFAULT 0,
 			latency_ms REAL,
-			last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
+			last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+			display_name TEXT,
+			tags TEXT,
+			icon TEXT
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_scan_hosts_ip ON scan_hosts(ip)`,
 		`CREATE INDEX IF NOT EXISTS idx_scan_hosts_alive ON scan_hosts(alive)`,
@@ -128,6 +131,17 @@ func (db *DB) createTables() error {
 		if _, err := db.Exec(table); err != nil {
 			return fmt.Errorf("failed to execute: %s: %w", table, err)
 		}
+	}
+
+	// Migrations: Try to add columns if they don't exist (for existing DBs)
+	// We ignore errors here because if the column exists, it will fail, which is fine.
+	migrations := []string{
+		"ALTER TABLE scan_hosts ADD COLUMN display_name TEXT",
+		"ALTER TABLE scan_hosts ADD COLUMN tags TEXT",
+		"ALTER TABLE scan_hosts ADD COLUMN icon TEXT",
+	}
+	for _, m := range migrations {
+		db.Exec(m)
 	}
 	
 	return nil

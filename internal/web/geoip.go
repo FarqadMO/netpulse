@@ -18,6 +18,8 @@ type GeoIP struct {
 	City    string  `json:"city"`
 	Country string  `json:"country"`
 	ISP     string  `json:"isp"`
+	AS      string  `json:"as"`
+	Org     string  `json:"org"`
 }
 
 // GeoIPCache caches GeoIP lookups.
@@ -48,7 +50,8 @@ func LookupIP(ip string) (*GeoIP, error) {
 	geoCache.mu.RUnlock()
 	
 	// Use ip-api.com (free, no API key, 45 req/min limit)
-	resp, err := http.Get("http://ip-api.com/json/" + ip + "?fields=status,country,city,lat,lon,isp,query")
+	// fields: status,country,city,lat,lon,isp,as,org,query
+	resp, err := http.Get("http://ip-api.com/json/" + ip + "?fields=status,country,city,lat,lon,isp,as,org,query")
 	if err != nil {
 		return nil, err
 	}
@@ -61,6 +64,8 @@ func LookupIP(ip string) (*GeoIP, error) {
 		Lat     float64 `json:"lat"`
 		Lon     float64 `json:"lon"`
 		ISP     string  `json:"isp"`
+		AS      string  `json:"as"`
+		Org     string  `json:"org"`
 		Query   string  `json:"query"`
 	}
 	
@@ -75,6 +80,8 @@ func LookupIP(ip string) (*GeoIP, error) {
 		City:    result.City,
 		Country: result.Country,
 		ISP:     result.ISP,
+		AS:      result.AS,
+		Org:     result.Org,
 	}
 	
 	// Cache result
@@ -120,6 +127,8 @@ type HopGeoData struct {
 	Lon       float64 `json:"lon,omitempty"`
 	City      string  `json:"city,omitempty"`
 	Country   string  `json:"country,omitempty"`
+	AS        string  `json:"as,omitempty"`
+	Org       string  `json:"org,omitempty"`
 }
 
 // TraceGeoHandler returns a trace with geo coordinates for all hops.
@@ -148,7 +157,44 @@ func (h *Handlers) TraceGeoHandler(w http.ResponseWriter, r *http.Request) {
 		ID:        trace.ID,
 		Target:    trace.Target,
 		Timestamp: trace.Timestamp,
-		Hops:      make([]HopGeoData, 0, len(trace.Hops)),
+		Hops:      make([]HopGeoData, 0, len(trace.Hops)+1),
+	}
+	
+	// Find public IP at that time
+	ipStorage := storage.NewIPStorage(h.db)
+	ipHistory, _ := ipStorage.GetHistory(time.Now().Add(-24 * 365 * time.Hour)) // Get all history
+	
+	var publicIP string
+	var minDiff time.Duration = 24 * time.Hour
+	
+	for _, ip := range ipHistory {
+		diff := trace.Timestamp.Sub(ip.Timestamp)
+		if diff < 0 {
+			diff = -diff
+		}
+		if diff < minDiff {
+			minDiff = diff
+			publicIP = ip.IP
+		}
+	}
+	
+	// Add public IP as first hop (Hop 0)
+	if publicIP != "" {
+		hopGeo := HopGeoData{
+			HopNum:    0,
+			IP:        publicIP,
+			LatencyMs: 0,
+			Lost:      false,
+		}
+		if geo, err := LookupIP(publicIP); err == nil && geo.Lat != 0 {
+			hopGeo.Lat = geo.Lat
+			hopGeo.Lon = geo.Lon
+			hopGeo.City = geo.City
+			hopGeo.Country = geo.Country
+			hopGeo.AS = geo.AS
+			hopGeo.Org = geo.Org
+		}
+		result.Hops = append(result.Hops, hopGeo)
 	}
 	
 	for _, hop := range trace.Hops {
@@ -166,6 +212,8 @@ func (h *Handlers) TraceGeoHandler(w http.ResponseWriter, r *http.Request) {
 				hopGeo.Lon = geo.Lon
 				hopGeo.City = geo.City
 				hopGeo.Country = geo.Country
+				hopGeo.AS = geo.AS
+				hopGeo.Org = geo.Org
 			}
 			// Small delay to avoid rate limiting
 			time.Sleep(50 * time.Millisecond)
