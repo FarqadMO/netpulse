@@ -64,6 +64,7 @@ function showTab(tabId) {
 
     if (tabId === 'topology') loadTopology();
     if (tabId === 'map') initMap();
+    if (tabId === 'dns' && window.initDNS) window.initDNS();
 }
 
 // ===== Host Filtering =====
@@ -86,8 +87,14 @@ async function loadTraces(page = 1) {
     const target = document.getElementById('traceFilter')?.value || '';
     const limit = 10;
 
+    // Get time filter params
+    let params = `page=${page}&limit=${limit}&target=${encodeURIComponent(target)}`;
+    if (window.getGlobalTimeParams) {
+        params += '&' + window.getGlobalTimeParams();
+    }
+
     try {
-        const res = await fetch(`/api/traces?page=${page}&limit=${limit}&target=${encodeURIComponent(target)}`);
+        const res = await fetch(`/api/traces?${params}`);
         const data = await res.json();
 
         const container = document.getElementById('traceResults');
@@ -247,9 +254,40 @@ async function loadMapTraces() {
         if (data.traces && data.traces.length > 0) {
             showTraceOnMap(data.traces[0].id);
         }
-    } catch (e) { console.error('Map traces error:', e); }
+    } catch (e) {
+        console.error('Save status error:', e);
+        alert('Failed to save metadata');
+    }
 }
 
+// ===== Global Time Filter =====
+window.getGlobalTimeParams = function () {
+    const range = document.getElementById('timeRange')?.value || '24h';
+    const now = new Date();
+    let start = new Date();
+
+    switch (range) {
+        case '1h': start.setHours(now.getHours() - 1); break;
+        case '6h': start.setHours(now.getHours() - 6); break;
+        case '24h': start.setHours(now.getHours() - 24); break;
+        case '7d': start.setDate(now.getDate() - 7); break;
+        case '30d': start.setDate(now.getDate() - 30); break;
+    }
+    return `start=${start.toISOString()}&end=${now.toISOString()}`;
+}
+
+window.updateGlobalTime = function () {
+    const filter = window.getGlobalTimeParams();
+    console.log("Time Filter:", filter);
+
+    // Trigger updates
+    updateActiveTab();
+
+    // Explicitly update DNS if needed (it has its own interval, but we want instant refresh)
+    if (document.getElementById('dns').classList.contains('active') && window.updateDNS) {
+        window.updateDNS();
+    }
+}    // Update selection
 async function showTraceOnMap(traceId) {
     // Update selection
     document.querySelectorAll('.trace-item').forEach(el => {
@@ -501,4 +539,166 @@ window.onclick = function (event) {
     if (event.target === modal) {
         closeAssetModal();
     }
+}
+
+// ===== Global Time Filter =====
+window.getGlobalTimeParams = function () {
+    const range = document.getElementById('timeRange')?.value || '24h';
+    const now = new Date();
+    let start = new Date();
+
+    switch (range) {
+        case '1h': start.setHours(now.getHours() - 1); break;
+        case '6h': start.setHours(now.getHours() - 6); break;
+        case '24h': start.setHours(now.getHours() - 24); break;
+        case '7d': start.setDate(now.getDate() - 7); break;
+        case '30d': start.setDate(now.getDate() - 30); break;
+    }
+    return `start=${start.toISOString()}&end=${now.toISOString()}`;
+}
+
+window.updateGlobalTime = function () {
+    const filter = window.getGlobalTimeParams();
+    console.log("Time Filter:", filter);
+
+    // Trigger updates
+    updateActiveTab();
+
+    // Explicitly update DNS if needed (it has its own interval, but we want instant refresh)
+    if (document.getElementById('dns').classList.contains('active') && window.updateDNS) {
+        window.updateDNS();
+    }
+}
+
+// ===== Trace Comparison Functions =====
+function showCompareMode() {
+    document.getElementById('traces').style.display = 'none';
+    document.getElementById('traceCompare').style.display = 'block';
+}
+
+function hideCompareMode() {
+    document.getElementById('traces').style.display = 'block';
+    document.getElementById('traceCompare').style.display = 'none';
+    document.getElementById('compareSelector').style.display = 'none';
+    document.getElementById('compareResults').style.display = 'none';
+}
+
+async function loadCompareTraceList() {
+    const target = document.getElementById('compareTarget').value;
+    if (!target) {
+        document.getElementById('compareSelector').style.display = 'none';
+        document.getElementById('compareResults').style.display = 'none';
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/traces/by-target?target=${encodeURIComponent(target)}&limit=100`);
+        const traces = await res.json();
+
+        if (!traces || traces.length === 0) {
+            alert('No traces found for this target');
+            return;
+        }
+
+        const select1 = document.getElementById('compareTrace1');
+        const select2 = document.getElementById('compareTrace2');
+
+        const options = traces.map(t => {
+            const date = new Date(t.timestamp);
+            const dateStr = date.toLocaleString();
+            return `<option value="${t.id}" data-timestamp="${t.timestamp}">${dateStr}</option>`;
+        }).join('');
+
+        select1.innerHTML = '<option value="">Select timestamp...</option>' + options;
+        select2.innerHTML = '<option value="">Select timestamp...</option>' + options;
+
+        document.getElementById('compareSelector').style.display = 'block';
+        document.getElementById('compareResults').style.display = 'none';
+    } catch (e) {
+        console.error('Failed to load traces:', e);
+        alert('Failed to load traces');
+    }
+}
+
+async function performComparison() {
+    const trace1Id = document.getElementById('compareTrace1').value;
+    const trace2Id = document.getElementById('compareTrace2').value;
+
+    if (!trace1Id || !trace2Id) {
+        alert('Please select both traces');
+        return;
+    }
+
+    if (trace1Id === trace2Id) {
+        alert('Please select different traces');
+        return;
+    }
+
+    try {
+        // Fetch both traces
+        const [res1, res2] = await Promise.all([
+            fetch(`/api/traces/${trace1Id}`),
+            fetch(`/api/traces/${trace2Id}`)
+        ]);
+
+        const trace1 = await res1.json();
+        const trace2 = await res2.json();
+
+        // Get public IPs for both timestamps
+        const [ip1Res, ip2Res] = await Promise.all([
+            fetch(`/api/public-ip-at-time?timestamp=${encodeURIComponent(trace1.timestamp)}`),
+            fetch(`/api/public-ip-at-time?timestamp=${encodeURIComponent(trace2.timestamp)}`)
+        ]);
+
+        const ip1Data = await ip1Res.json();
+        const ip2Data = await ip2Res.json();
+
+        // Display results
+        displayComparison(trace1, trace2, ip1Data, ip2Data);
+    } catch (e) {
+        console.error('Comparison failed:', e);
+        alert('Failed to perform comparison');
+    }
+}
+
+function displayComparison(trace1, trace2, ip1Data, ip2Data) {
+    // Update headers
+    document.getElementById('compare1Header').textContent =
+        `Trace - ${new Date(trace1.timestamp).toLocaleString()}`;
+    document.getElementById('compare2Header').textContent =
+        `Trace - ${new Date(trace2.timestamp).toLocaleString()}`;
+
+    // Display public IP info
+    document.getElementById('compare1IP').innerHTML = `
+        <strong>Public IP:</strong> ${ip1Data.ip}<br>
+        <strong>ISP:</strong> ${ip1Data.isp || 'Unknown'}<br>
+        <strong>ASN:</strong> ${ip1Data.asn || 'Unknown'}
+    `;
+
+    document.getElementById('compare2IP').innerHTML = `
+        <strong>Public IP:</strong> ${ip2Data.ip}<br>
+        <strong>ISP:</strong> ${ip2Data.isp || 'Unknown'}<br>
+        <strong>ASN:</strong> ${ip2Data.asn || 'Unknown'}
+    `;
+
+    // Display trace hops
+    document.getElementById('compare1Content').innerHTML = renderTraceHops(trace1.hops);
+    document.getElementById('compare2Content').innerHTML = renderTraceHops(trace2.hops);
+
+    // Show results
+    document.getElementById('compareResults').style.display = 'block';
+}
+
+function renderTraceHops(hops) {
+    if (!hops || hops.length === 0) {
+        return '<p class="empty-state">> No hops</p>';
+    }
+
+    return hops.map(h => `
+        <div class="trace-hop" style="display: flex; padding: 0.4rem 0; border-bottom: 1px dashed var(--border-color);">
+            <span class="hop-num" style="color: var(--text-dim); width: 40px;">${h.hop_num}.</span>
+            <span class="hop-ip" style="color: var(--accent); flex: 1;">${h.lost ? '* * *' : h.ip}</span>
+            <span class="hop-latency" style="color: var(--text-secondary);">${h.lost ? '' : h.latency_ms.toFixed(1) + ' ms'}</span>
+        </div>
+    `).join('');
 }

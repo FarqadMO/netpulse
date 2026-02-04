@@ -42,3 +42,4 @@ config.yaml
 tmp/
 coverage.out
 profile.out
+landing-page/

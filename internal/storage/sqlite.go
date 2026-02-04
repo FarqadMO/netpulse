@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"sync"
+	"time"
+
+	"github.com/user/netpulse/internal/model"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -36,19 +39,19 @@ func Initialize(dataDir string) (*DB, error) {
 			initErr = fmt.Errorf("failed to open database: %w", err)
 			return
 		}
-		
+
 		// Set connection pool settings
 		db.SetMaxOpenConns(1) // SQLite only supports one writer
 		db.SetMaxIdleConns(1)
-		
+
 		instance = &DB{DB: db}
-		
+
 		if err := instance.createTables(); err != nil {
 			initErr = fmt.Errorf("failed to create tables: %w", err)
 			return
 		}
 	})
-	
+
 	return instance, initErr
 }
 
@@ -65,7 +68,7 @@ func (db *DB) createTables() error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_ip_history_timestamp ON ip_history(timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_ip_history_ip ON ip_history(ip)`,
-		
+
 		`CREATE TABLE IF NOT EXISTS traces (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			target TEXT NOT NULL,
@@ -73,7 +76,7 @@ func (db *DB) createTables() error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON traces(timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_traces_target ON traces(target)`,
-		
+
 		`CREATE TABLE IF NOT EXISTS trace_hops (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			trace_id INTEGER NOT NULL,
@@ -85,7 +88,7 @@ func (db *DB) createTables() error {
 			FOREIGN KEY (trace_id) REFERENCES traces(id) ON DELETE CASCADE
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_trace_hops_trace_id ON trace_hops(trace_id)`,
-		
+
 		`CREATE TABLE IF NOT EXISTS scan_hosts (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			ip TEXT NOT NULL UNIQUE,
@@ -98,8 +101,25 @@ func (db *DB) createTables() error {
 			icon TEXT
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_scan_hosts_ip ON scan_hosts(ip)`,
+
+		`CREATE TABLE IF NOT EXISTS dns_metrics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            server TEXT NOT NULL,
+            protocol TEXT NOT NULL,
+            resolved_ip TEXT,
+            latency_ms INTEGER,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`,
+		`CREATE INDEX IF NOT EXISTS idx_dns_metrics_timestamp ON dns_metrics(timestamp)`,
+
+		`CREATE TABLE IF NOT EXISTS dns_targets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            ip TEXT,
+            doh_url TEXT
+        )`,
 		`CREATE INDEX IF NOT EXISTS idx_scan_hosts_alive ON scan_hosts(alive)`,
-		
+
 		`CREATE TABLE IF NOT EXISTS scan_ports (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			host_id INTEGER NOT NULL,
@@ -114,7 +134,7 @@ func (db *DB) createTables() error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_scan_ports_host_id ON scan_ports(host_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_scan_ports_port ON scan_ports(port)`,
-		
+
 		`CREATE TABLE IF NOT EXISTS anomalies (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			type TEXT NOT NULL,
@@ -126,7 +146,7 @@ func (db *DB) createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_anomalies_timestamp ON anomalies(timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_anomalies_type ON anomalies(type)`,
 	}
-	
+
 	for _, table := range tables {
 		if _, err := db.Exec(table); err != nil {
 			return fmt.Errorf("failed to execute: %s: %w", table, err)
@@ -139,11 +159,12 @@ func (db *DB) createTables() error {
 		"ALTER TABLE scan_hosts ADD COLUMN display_name TEXT",
 		"ALTER TABLE scan_hosts ADD COLUMN tags TEXT",
 		"ALTER TABLE scan_hosts ADD COLUMN icon TEXT",
+		"ALTER TABLE dns_metrics ADD COLUMN resolved_ip TEXT",
 	}
 	for _, m := range migrations {
 		db.Exec(m)
 	}
-	
+
 	return nil
 }
 
@@ -164,4 +185,106 @@ func (db *DB) WithRLock(fn func() error) error {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return fn()
+}
+
+// SaveDNSMetric records a new DNS measurement
+func (db *DB) SaveDNSMetric(m model.DNSMetric) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	_, err := db.Exec(`INSERT INTO dns_metrics (server, protocol, resolved_ip, latency_ms, timestamp) VALUES (?, ?, ?, ?, ?)`,
+		m.Server, m.Protocol, m.ResolvedIP, m.LatencyMs, m.Timestamp)
+	return err
+}
+
+// GetDNSHistory retrieves the latest DNS metrics
+func (db *DB) GetDNSHistory(limit int) ([]model.DNSMetric, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	rows, err := db.Query(`SELECT id, server, protocol, resolved_ip, latency_ms, timestamp FROM dns_metrics ORDER BY timestamp DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var metrics []model.DNSMetric
+	for rows.Next() {
+		var m model.DNSMetric
+		var resolvedIP sql.NullString
+		if err := rows.Scan(&m.ID, &m.Server, &m.Protocol, &resolvedIP, &m.LatencyMs, &m.Timestamp); err != nil {
+			return nil, err
+		}
+		m.ResolvedIP = resolvedIP.String
+		metrics = append(metrics, m)
+	}
+	return metrics, nil
+}
+
+// AddDNSTarget adds a new DNS target
+func (db *DB) AddDNSTarget(t model.DNSTarget) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	_, err := db.Exec(`INSERT INTO dns_targets (name, ip, doh_url) VALUES (?, ?, ?)`, t.Name, t.IP, t.DoHURL)
+	return err
+}
+
+// DeleteDNSTarget removes a target
+func (db *DB) DeleteDNSTarget(id int64) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	_, err := db.Exec(`DELETE FROM dns_targets WHERE id = ?`, id)
+	return err
+}
+
+// GetDNSTargets retrieves all targets
+func (db *DB) GetDNSTargets() ([]model.DNSTarget, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	rows, err := db.Query(`SELECT id, name, ip, doh_url FROM dns_targets`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var targets []model.DNSTarget
+	for rows.Next() {
+		var t model.DNSTarget
+		var ip, url sql.NullString
+		if err := rows.Scan(&t.ID, &t.Name, &ip, &url); err != nil {
+			return nil, err
+		}
+		t.IP = ip.String
+		t.DoHURL = url.String
+		targets = append(targets, t)
+	}
+	return targets, nil
+}
+
+// GetDNSHistoryTimeRange retrieves DNS metrics within a time range
+func (db *DB) GetDNSHistoryTimeRange(start, end time.Time) ([]model.DNSMetric, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	// SQLite datetime comparison works with strings in YYYY-MM-DD HH:MM:SS format
+	// But Go driver handles time.Time by converting.
+	// Ensuring we search correctly.
+
+	rows, err := db.Query(`SELECT id, server, protocol, resolved_ip, latency_ms, timestamp 
+                           FROM dns_metrics 
+                           WHERE timestamp BETWEEN ? AND ? 
+                           ORDER BY timestamp ASC`, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var metrics []model.DNSMetric
+	for rows.Next() {
+		var m model.DNSMetric
+		var resolvedIP sql.NullString
+		if err := rows.Scan(&m.ID, &m.Server, &m.Protocol, &resolvedIP, &m.LatencyMs, &m.Timestamp); err != nil {
+			return nil, err
+		}
+		m.ResolvedIP = resolvedIP.String
+		metrics = append(metrics, m)
+	}
+	return metrics, nil
 }

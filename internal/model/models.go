@@ -100,3 +100,21 @@ type ReportOptions struct {
 	IncludeTrace bool    `json:"include_trace"`
 	IncludeScan bool     `json:"include_scan"`
 }
+
+// DNSMetric represents a DNS latency measurement.
+type DNSMetric struct {
+	ID         int64     `json:"id"`
+	Server     string    `json:"server"`
+	Protocol   string    `json:"protocol"` // "udp" or "doh"
+	ResolvedIP string    `json:"resolved_ip"` // The captured IP address
+	LatencyMs  int       `json:"latency_ms"`
+	Timestamp  time.Time `json:"timestamp"`
+}
+
+// DNSTarget represents a monitored DNS server.
+type DNSTarget struct {
+	ID     int64  `json:"id"`
+	Name   string `json:"name"`
+	IP     string `json:"ip"`
+	DoHURL string `json:"doh_url"`
+}

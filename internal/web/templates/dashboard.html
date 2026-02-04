@@ -17,6 +17,15 @@
     <div class="container">
         <header>
             <h1>▶ NETPULSE<span style="animation: blink 1s infinite">_</span></h1>
+            <div class="time-filter">
+                <select id="timeRange" onchange="updateGlobalTime()">
+                    <option value="1h">Last Hour</option>
+                    <option value="6h">Last 6 Hours</option>
+                    <option value="24h" selected>Last 24 Hours</option>
+                    <option value="7d">Last 7 Days</option>
+                    <option value="30d">Last 30 Days</option>
+                </select>
+            </div>
             <div class="theme-switcher">
                 <button class="theme-btn active" data-theme="hacker" title="Hacker"></button>
                 <button class="theme-btn" data-theme="cyberpunk" title="Cyberpunk"></button>
@@ -34,6 +43,7 @@
             <button class="tab" onclick="showTab('latency')">Latency</button>
             <button class="tab" onclick="showTab('anomalies')">Anomalies</button>
             <button class="tab" onclick="showTab('hosts')">Hosts</button>
+            <button class="tab" onclick="showTab('dns')">DNS</button>
         </div>
 
         <!-- Overview -->
@@ -134,12 +144,72 @@
                         <option value="">All Targets</option>
                         {{range .trace_targets}}<option value="{{.}}">{{.}}</option>{{end}}
                     </select>
+                    <button class="btn" onclick="showCompareMode()" style="margin-left: auto;">Compare Traces</button>
                     <button class="btn" onclick="loadTraces(1)">Refresh</button>
                 </div>
                 <div id="traceResults">
                     <p class="empty-state">> Loading traces...</p>
                 </div>
                 <div id="tracePagination" class="pagination"></div>
+            </div>
+        </div>
+
+        <!-- Trace Comparison Mode (hidden by default) -->
+        <div id="traceCompare" class="tab-content" style="display: none;">
+            <div class="card">
+                <div class="card-title">Compare Traces</div>
+                <div class="filter-bar">
+                    <label style="margin-right: 10px;">Target IP:</label>
+                    <select id="compareTarget" onchange="loadCompareTraceList()">
+                        <option value="">Select Target...</option>
+                        {{range .trace_targets}}<option value="{{.}}">{{.}}</option>{{end}}
+                    </select>
+                    <button class="btn" onclick="hideCompareMode()" style="margin-left: auto;">Back to List</button>
+                </div>
+
+                <div id="compareSelector" style="display: none; margin-top: 15px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div>
+                            <label
+                                style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 5px;">First
+                                Trace</label>
+                            <select id="compareTrace1" class="compare-select">
+                                <option value="">Select timestamp...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label
+                                style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 5px;">Second
+                                Trace</label>
+                            <select id="compareTrace2" class="compare-select">
+                                <option value="">Select timestamp...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn" onclick="performComparison()" style="width: 100%;">Compare Selected
+                        Traces</button>
+                </div>
+
+                <div id="compareResults" style="display: none; margin-top: 20px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div>
+                            <div class="compare-header">
+                                <h3 id="compare1Header" style="color: var(--accent); margin-bottom: 5px;">Trace 1</h3>
+                                <div id="compare1IP"
+                                    style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 10px;"></div>
+                            </div>
+                            <div id="compare1Content" class="compare-content"></div>
+                        </div>
+                        <div>
+                            <div class="compare-header">
+                                <h3 id="compare2Header" style="color: var(--accent); margin-bottom: 5px;">Trace 2</h3>
+                                <div id="compare2IP"
+                                    style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 10px;"></div>
+                            </div>
+                            <div id="compare2Content" class="compare-content"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -214,15 +284,65 @@
                 {{else}}<p class="empty-state">> No hosts discovered</p>{{end}}
             </div>
         </div>
+    </div>
 
-        <div class="actions">
-            <a href="/report" class="btn">Download Report</a>
-            <button class="btn" onclick="updateActiveTab()">Refresh</button>
+    <!-- DNS -->
+    <div id="dns" class="tab-content">
+        <div class="card" style="height: 400px; margin-bottom: 20px;">
+            <div class="card-title">DNS Latency Monitor (UDP vs DoH)</div>
+            <div style="position: relative; height: 100%; width: 100%">
+                <canvas id="dnsChart"></canvas>
+            </div>
         </div>
-        <div class="footer">NETPULSE v1.0 | <span class="live-indicator">●</span> Live Poll Mode</div>
+
+        <div class="grid">
+            <!-- Integrity Check -->
+            <div class="card">
+                <div class="card-title">Resolution Integrity</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Server</th>
+                            <th>UDP IP</th>
+                            <th>DoH IP</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dnsIntegrityBody">
+                        <tr>
+                            <td colspan="4" style="text-align:center">Waiting for data...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Target Management -->
+            <div class="card">
+                <div class="card-title">Custom Monitors</div>
+                <div id="targetList" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px;"></div>
+
+                <div class="form-group">
+                    <input type="text" id="newTargetName" placeholder="Name (e.g. My PiHole)"
+                        style="width:100%; margin-bottom:5px">
+                    <div style="display:flex; gap:5px">
+                        <input type="text" id="newTargetIP" placeholder="UDP IP (192.168.1.5)" style="flex:1">
+                        <input type="text" id="newTargetDoH" placeholder="DoH URL (Optional)" style="flex:1">
+                    </div>
+                    <button onclick="addDNSTarget()" class="btn" style="width:100%; margin-top:10px">Add Target</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <a href="/report" class="btn">Download Report</a>
+        <button class="btn" onclick="updateActiveTab()">Refresh</button>
+    </div>
+    <div class="footer">NETPULSE v1.0 | <span class="live-indicator">●</span> Live Poll Mode</div>
     </div>
 
     <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/dns.js"></script>
 
     <!-- Asset Modal -->
     <div id="assetModal" class="modal">
